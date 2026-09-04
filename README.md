@@ -44,16 +44,30 @@ MySQL on 3306.
 
 ## Manual installation (without Docker)
 
-Needs PHP 8.2+ with `pdo_mysql`, Composer and MySQL 8.
+Needs PHP 8.2+ with `pdo_mysql`, Composer and MySQL 8. Running the test suite additionally
+needs `pdo_sqlite` (shipped by default in most PHP builds).
 
 ```sh
 composer install
 cp .env.example .env
-# point DB_HOST/DB_PORT at your MySQL (e.g. 127.0.0.1 / 3306)
 php artisan key:generate
+```
+
+`.env.example` ships `DB_HOST=mysql`, which is the Docker compose service name, so **change it**
+to your own MySQL before going further:
+
+```sh
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=booking
+DB_USERNAME=booking
+DB_PASSWORD=your-password
+```
+
+```sh
 php artisan migrate --seed
 php artisan serve       # http://localhost:8000
-php artisan queue:work  # required, imports are processed asynchronously
+php artisan queue:work  # required, imports stay `pending` without it
 ```
 
 ## Commands
