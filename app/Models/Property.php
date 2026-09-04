@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\PropertyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Property extends Model
@@ -22,5 +23,11 @@ class Property extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(Offer::class);
+    }
+
+    /** @return BelongsTo<Offer, $this> */
+    public function bestOffer(): BelongsTo
+    {
+        return $this->belongsTo(Offer::class, 'best_offer_id');
     }
 }

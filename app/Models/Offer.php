@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\OfferFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,5 +60,15 @@ class Offer extends Model
     public function reservations(): HasMany
     {
         return $this->hasMany(Reservation::class);
+    }
+
+    /** @param Builder<Offer> $query */
+    public function scopeBookable(Builder $query, string $checkIn, string $checkOut, int $guests): void
+    {
+        $query->where('offers.check_in', $checkIn)
+            ->where('offers.check_out', $checkOut)
+            ->where('offers.max_guests', '>=', $guests)
+            ->where('offers.available_units', '>', 0)
+            ->where('offers.expires_at', '>', now());
     }
 }
