@@ -71,6 +71,102 @@ no Redis is needed. Tests default to an in-memory SQLite database (`phpunit.xml`
 `./run.sh test:mysql` runs the identical suite against the MySQL 8 container (`booking_test`),
 and it is green there too.
 
+## Database schema
+
+```mermaid
+erDiagram
+    suppliers   ||--o{ imports      : sends
+    suppliers   ||--o{ offers       : publishes
+    properties  ||--o{ offers       : "is offered as"
+    imports     |o--o{ offers       : "last touched"
+    offers      ||--o{ reservations : "is booked as"
+
+    suppliers {
+        bigint id PK
+        string code UK "supplier-a, supplier-b"
+        string name
+        timestamps created_updated
+    }
+
+    properties {
+        bigint id PK
+        string code UK "BCN-0001"
+        string name
+        string city "indexed"
+        timestamps created_updated
+    }
+
+    imports {
+        bigint id PK
+        bigint supplier_id FK
+        string external_import_id "unique per supplier"
+        datetime sent_at "when the supplier built it"
+        string status "pending processing completed failed"
+        json payload "raw offers, replayed on retry"
+        int total_offers
+        int processed_offers
+        text error "nullable"
+        datetime completed_at "nullable"
+        timestamps created_updated
+    }
+
+    offers {
+        bigint id PK
+        bigint supplier_id FK
+        bigint property_id FK
+        bigint import_id FK "nullable, last import that touched it"
+        string external_id "unique per supplier"
+        date check_in
+        date check_out
+        smallint max_guests
+        bigint price "minor units, 72500 = 725.00"
+        char currency "ISO 4217"
+        int total_units "what the supplier announced"
+        int available_units "what is left after bookings"
+        datetime expires_at
+        timestamps created_updated
+    }
+
+    reservations {
+        bigint id PK
+        bigint offer_id FK
+        string client_reference UK "idempotency key of the booking"
+        string customer_name
+        string customer_email
+        timestamps created_updated
+    }
+```
+
+### Keys and indexes
+
+| Table | Index | Why |
+|---|---|---|
+| `suppliers` | `code` unique | the API addresses suppliers by code, not id |
+| `properties` | `code` unique | `firstOrCreate` target when an import arrives |
+| `properties` | `city` | the only optional search filter |
+| `imports` | `(supplier_id, external_import_id)` unique | **import idempotency** — a repeated POST hits this index instead of creating a row |
+| `offers` | `(supplier_id, external_id)` unique | **offer idempotency** — an offer seen again is updated, not duplicated |
+| `offers` | `(property_id, check_in, check_out, price)` | serves the correlated "cheapest bookable offer" subquery, and `price` last lets the index also satisfy the `ORDER BY` |
+| `offers` | `(check_in, check_out, max_guests)` | serves the `EXISTS` filter that drops properties without a matching offer |
+| `reservations` | `client_reference` unique | the same booking request can never be counted twice |
+
+### Foreign keys
+
+| Column | On delete | Reasoning |
+|---|---|---|
+| `imports.supplier_id` | cascade | dropping a supplier drops its import history |
+| `offers.supplier_id` | cascade | an offer cannot outlive its supplier |
+| `offers.property_id` | cascade | an offer cannot outlive its property |
+| `offers.import_id` | set null | the column only records which import last touched the offer; deleting an old import must not delete live offers |
+| `reservations.offer_id` | restrict | an offer with reservations must not be deletable |
+
+### Two counters on `offers`
+
+`total_units` is the supplier's number; `available_units` is what is actually left. Bookings only
+ever decrement `available_units`, and a re-import recomputes it as
+`max(0, new total_units − already consumed)`. Keeping both means the supplier stays the source of
+truth for stock size without a re-import silently handing out a unit that is already booked.
+
 ## Endpoints
 
 ### `POST /api/imports`
