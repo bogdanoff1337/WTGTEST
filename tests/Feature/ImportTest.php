@@ -97,6 +97,28 @@ class ImportTest extends TestCase
         $this->assertSame(1, $offer->available_units);
     }
 
+    public function test_it_keeps_units_that_are_already_booked(): void
+    {
+        $this->postJson('/api/imports', $this->payload())->assertAccepted();
+
+        $offer = Offer::query()->firstOrFail();
+
+        $this->postJson("/api/offers/{$offer->id}/reservations", [
+            'client_reference' => 'client-1',
+            'customer_name' => 'Ada Lovelace',
+            'customer_email' => 'ada@example.com',
+        ])->assertCreated();
+
+        $this->assertSame(2, $offer->fresh()?->available_units);
+
+        $this->postJson('/api/imports', $this->payload(['external_import_id' => 'import-2']))->assertAccepted();
+
+        $offer->refresh();
+
+        $this->assertSame(3, $offer->total_units);
+        $this->assertSame(2, $offer->available_units);
+    }
+
     public function test_it_rejects_duplicate_offer_ids_in_one_payload(): void
     {
         $payload = $this->payload();
