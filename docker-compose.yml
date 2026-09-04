@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    ports:
+      - '${APP_PORT:-8000}:8000'
+    volumes:
+      - .:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  queue:
+    build: .
+    command: php artisan queue:work --tries=3 --timeout=120 --sleep=1
+    volumes:
+      - .:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - '${DB_HOST_PORT:-3307}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: booking
+      MYSQL_USER: booking
+      MYSQL_PASSWORD: secret
+    volumes:
+      - mysql:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-u', 'root', '-psecret']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysql:
